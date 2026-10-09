@@ -1,5 +1,7 @@
 # Isolated AWS staging plan — review only
 
+**Superseded compute/network/cost proposal:** account is now confirmed as `296903956631`, staging region `us-west-2`, existing Amplify applications `us-west-1`. App Runner is not assumed available to new customers. Use `OCTOBER_15_ECS_STAGING_REVISION.md` for the current proposed backend architecture, costs and approval gates; the App Runner tables below are historical and must not be provisioned.
+
 Prepared 2026-10-09 (America/Los_Angeles). No AWS resources, infrastructure, production databases or deployments were changed. This extends the approved feature branches. Updated target: OC Sports Summit October 15, 2026; event time still needed. Use the existing Nature Wired AWS account, with account ID/region/role unconfirmed. Cost scenario uses us-west-2, not a discovered deployment region. AWS-generated staging HTTPS URLs are acceptable. Budget and badge-retention owner remain unconfirmed. The three-project shortlist is explicitly pending approval; keep any live campaign DRAFT and never run auto-publishing configure:sports before separate publication authorization.
 
 ## Existing resources: known URLs, unverified mapping
