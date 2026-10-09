@@ -1,6 +1,6 @@
 # Isolated AWS staging plan — review only
 
-Prepared 2026-10-09 (America/Los_Angeles). No AWS resources, infrastructure, production databases or deployments were changed. This extends the approved feature branches. Target: OC Sports Summit the following week in October 2026; exact date/time still needed. Use the existing Nature Wired AWS account, with account ID/region/role unconfirmed. Cost scenario uses us-west-2, not a discovered deployment region. AWS-generated staging HTTPS URLs are acceptable. Budget and badge-retention owner remain unconfirmed.
+Prepared 2026-10-09 (America/Los_Angeles). No AWS resources, infrastructure, production databases or deployments were changed. This extends the approved feature branches. Target: OC Sports Summit October 12, 2026; event time still needed. Use the existing Nature Wired AWS account, with account ID/region/role unconfirmed. Cost scenario uses us-west-2, not a discovered deployment region. AWS-generated staging HTTPS URLs are acceptable. Budget and badge-retention owner remain unconfirmed.
 
 ## Existing resources: known URLs, unverified mapping
 
@@ -101,6 +101,16 @@ A seven-day rehearsal/event allocation is roughly $15–30 with setup/build over
 
 ## Deadline and information/approval needed
 
-Complete source/CI preparation now. After Atlas/project approval and AWS/OAuth inputs arrive, target isolated provisioning and smoke validation within one working day, then a phone/backup/authorization rehearsal no later than the day before the event. This is a planning target, not a deployment promise; confirm the actual event date/time before assigning calendar deadlines. Blockers must be resolved early enough for that rehearsal.
+October 9: source and isolated testing are complete; resolve the Atlas binding and AWS/OAuth inputs now. October 10: target live shortlist approval, staging release approval and isolated provisioning/smoke validation. October 11: target phone/backup/authorization rehearsal. October 12: demonstration. These are readiness targets, not permission to deploy or a delivery promise while external prerequisites remain unresolved. If authorization/OAuth/Atlas prerequisites are not available in time, report the incomplete live demonstration honestly; do not substitute fixtures for real projects or expose reporting publicly.
+
+## Fresh-task handoff: next action for the owner
+
+In Codex environment settings, confirm that the existing Network secret is bound to the application variable `ATLAS_API_KEY` for the confirmed Atlas HTTPS hostname (currently `atlas.xeptagon.com`). Review/save the environment changes and publish the environment using the available UI. Do not paste or duplicate the key in chat. A saved draft does not inject it into this running task.
+
+Start a new task using that published environment and select `feat/oc-summit-milestone-a` in both primary repositories. Read `docs/RESUME_TESTING.md`, this plan and `docs/HISTORICAL_ARCHITECTURE_ATLAS_RECONCILIATION.md`. Verify the remote feature tips and preserve changes; never reset to main. Check variable presence only. If the new task still lacks the binding, report that once and stop credential-dependent requests; do not assume publication succeeded merely because settings were saved.
+
+With the binding accessible, run backend `npm run atlas:verify -- --query mangrove`, then nature/community searches and detail retrieval through the installed Guardian plugin. Validate identities, native SDGs and metadata/provenance, and present three real candidates plus evidence and limitations for owner approval. Do not publish or configure an auto-publishing campaign before that approval; do not claim funding availability from listing. Keep credentials server-side and sanitize errors. No legacy SDG keyword mapping or classification is authorized.
+
+Staging startup is a mandatory release gate: `npm run start:sports` (equivalently `node dist/src/sports/main.js`), `SPORTS_HOST=0.0.0.0`, `SPORTS_PORT=8080`. Never use `start:prod` or `dist/src/main.js`. Owner approval must name the target account/region, new resources and budget, reviewed sports-only SQL against the new isolated DB, release commits/image and OAuth/admin configuration before any AWS changes. Campaign project approval is separate from deployment approval.
 
 AWS account ID and deployment role; region; event/rehearsal date; approved budget and badge retention; OAuth client/admin allowlist; desired domain; expected peak traffic; owner to securely provision staging secrets; and, for legacy live regression, separate legacy staging API/database details. Existing Amplify/CloudFront IDs and origin mappings are only needed if reusing resources; this plan intentionally creates isolated services. Approve the three real project candidates and then the concrete staging release before any resource creation/deployment.
