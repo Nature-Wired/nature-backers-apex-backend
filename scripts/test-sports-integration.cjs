@@ -113,6 +113,8 @@ async function main() {
   const signed = await new SignJWT({ email: 'operator@example.test', email_verified: true }).setProtectedHeader({ alg: 'HS256' }).setSubject('local-test-operator').setIssuer('nature-backers-frontend').setAudience('sports-admin').setIssuedAt().setExpirationTime('60s').sign(Buffer.from(process.env.SPORTS_ADMIN_JWT_SECRET));
   const admin = req => req.set('Authorization', `Bearer ${signed}`);
   phase = 'http-contracts';
+  await api.get('/health/sports/live').expect(200, { status: 'ok' });
+  await api.get('/health/sports').expect(200, { status: 'ok' });
   await api.post('/admin/sports-campaigns').send({ userId: 1 }).expect(401);
   const created = await admin(api.post('/admin/sports-campaigns')).send({ slug: 'fixture-http-demo', name: 'Fixture demonstration', event: 'Fictional sports event', startsAt: new Date(Date.now() - 60000).toISOString(), endsAt: new Date(Date.now() + 3600000).toISOString(), commitmentAmount: '100.00', commitmentCurrency: 'USD' }).expect(201);
   const campaignId = created.body.id;

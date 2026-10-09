@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+# Pinned Docker Official Image manifest; same base for build and runtime.
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build
+RUN --mount=type=secret,id=network_proxy \
+    if [ -s /run/secrets/network_proxy ]; then export http_proxy="$(cat /run/secrets/network_proxy)"; export https_proxy="$http_proxy"; fi; \
+    apt-get update && apt-get install -y --no-install-recommends git ca-certificates openssl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json package-lock.json ./
+# Optional BuildKit-mounted Git configuration for authorized locked Git dependencies.
+# Never put credentials in ARG/ENV or copy credential files into the image.
+RUN --mount=type=secret,id=gitconfig,target=/root/.gitconfig --mount=type=secret,id=network_proxy \
+    if [ -s /run/secrets/network_proxy ]; then export HTTP_PROXY="$(cat /run/secrets/network_proxy)"; export HTTPS_PROXY="$HTTP_PROXY"; fi; \
+    npm ci --ignore-scripts --no-audit --no-fund
+COPY nest-cli.json tsconfig.json tsconfig.build.json ./
+COPY prisma ./prisma
+COPY src ./src
+RUN --mount=type=secret,id=network_proxy \
+    if [ -s /run/secrets/network_proxy ]; then export HTTP_PROXY="$(cat /run/secrets/network_proxy)"; export HTTPS_PROXY="$HTTP_PROXY"; fi; \
+    npm run build && npm prune --omit=dev --ignore-scripts --no-audit --no-fund && rm -rf /root/.npm
+
+FROM node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runtime
+RUN --mount=type=secret,id=network_proxy \
+    if [ -s /run/secrets/network_proxy ]; then export http_proxy="$(cat /run/secrets/network_proxy)"; export https_proxy="$http_proxy"; fi; \
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV NODE_ENV=production SPORTS_HOST=0.0.0.0 SPORTS_PORT=8080
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/package.json ./package.json
+USER node
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:8080/health/sports/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "dist/src/sports/main.js"]
