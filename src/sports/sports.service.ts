@@ -78,9 +78,12 @@ export class SportsService {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.db.$transaction(async tx => {
-          const c = await tx.sportsCampaign.findUnique({ where: { slug } });
+          // Serialize a campaign's submissions before reading status or prior selections.
+          // ReadCommitted then sees the preceding commit after waiting for this lock.
+          const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "SportsCampaign" WHERE slug = ${slug} FOR UPDATE`;
+          if (!locked.length) throw new NotFoundException();
+          const c = await tx.sportsCampaign.findUnique({ where: { id: locked[0].id } });
           if (!c || c.status === 'DRAFT') throw new NotFoundException();
-          await tx.$queryRaw`SELECT id FROM "SportsCampaign" WHERE id = ${c.id}::uuid FOR UPDATE`;
           const prior = await tx.fanSelection.findFirst({ where: { campaignId: c.id, OR: [{ idempotencyKey: input.idempotencyKey }, { participantHash }] }, include: { reward: true } });
           if (prior) {
             if (prior.participantHash !== participantHash || prior.ballotProjectId !== input.ballotProjectId) throw new ConflictException('A different selection has already been recorded');
@@ -93,7 +96,7 @@ export class SportsService {
           const selection = await tx.fanSelection.create({ data: { campaignId: c.id, ballotProjectId: p.id, participantHash, idempotencyKey: input.idempotencyKey } });
           const reward = await tx.rewardIssuance.create({ data: { selectionId: selection.id, rewardType: c.rewardType, claimKeyVersion: process.env.SPORTS_CLAIM_KEY_VERSION || 'v1', snapshot: { event: c.event, campaign: c.name, sponsor: c.sponsor, project: snapshot, fixture: snapshot.provenance === 'DEVELOPMENT_FIXTURE', config: c.rewardConfig } } });
           return this.receipt(reward, false);
-        }, { isolationLevel: 'Serializable' });
+        }, { isolationLevel: 'ReadCommitted' });
       } catch (error) {
         if (['P2034', 'P2002'].includes(error.code) && attempt < 2) continue;
         throw error;

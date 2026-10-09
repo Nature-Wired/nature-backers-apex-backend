@@ -23,4 +23,13 @@ describe('persistent wallet-free badge claims', () => {
     const svg = renderBadge({ ...reward, issuedAt: new Date(), snapshot: { event: '<script>alert(1)</script>', project: { name: 'Fixture & example' }, fixture: true } });
     expect(svg).not.toContain('<script>'); expect(svg).toContain('&lt;script&gt;'); expect(svg).toContain('DEVELOPMENT FIXTURE');
   });
+  it('never echoes malformed signing credentials in an error', () => {
+    const previous = process.env.SPORTS_CLAIM_KEYS;
+    const sensitive = 'test-only-sensitive-invalid-json-with-more-than-32-characters';
+    try {
+      process.env.SPORTS_CLAIM_KEYS = sensitive;
+      try { claimToken(reward); throw new Error('Expected configuration failure'); }
+      catch (error) { expect(error.message).toBe('Badge signing configuration unavailable'); expect(error.message).not.toContain(sensitive); }
+    } finally { process.env.SPORTS_CLAIM_KEYS = previous; }
+  });
 });

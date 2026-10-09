@@ -2,7 +2,14 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { NotFoundException } from '@nestjs/common';
 import { requiredSecret } from './security';
 export function claimToken(reward: { id: string; claimKeyVersion: string }) {
-  const keys = JSON.parse(requiredSecret('SPORTS_CLAIM_KEYS'));
+  let keys: Record<string, unknown>;
+  try {
+    keys = JSON.parse(requiredSecret('SPORTS_CLAIM_KEYS'));
+    if (!keys || typeof keys !== 'object' || Array.isArray(keys)) throw new Error();
+  } catch {
+    // JSON syntax errors can echo secret input; replace them before server logging.
+    throw new Error('Badge signing configuration unavailable');
+  }
   const key = keys[reward.claimKeyVersion];
   if (typeof key !== 'string' || key.length < 32) throw new Error('Badge signing key unavailable');
   const signature = createHmac('sha256', key).update(`${reward.id}:${reward.claimKeyVersion}`).digest('base64url');

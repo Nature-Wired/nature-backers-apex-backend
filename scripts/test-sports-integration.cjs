@@ -1,5 +1,5 @@
 // Real NestJS/Prisma/Postgres HTTP tests. Test-only WASM client; production schema is unchanged.
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const { randomUUID, randomBytes } = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -13,39 +13,112 @@ const { SignJWT } = require('jose');
 const name = `nature-sports-http-${randomUUID()}`;
 const password = randomBytes(24).toString('hex');
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-let db, prisma, app;
+let db, prisma, app, frontendProcess, browser;
+let phase = 'setup';
+const transactionFailures = {};
+async function browserJourney(campaignId) {
+  phase = 'real-browser';
+  const frontend = path.resolve(process.env.SPORTS_FRONTEND_PATH || '../Nature-Backers');
+  const { chromium } = require(path.join(frontend, 'node_modules/@playwright/test'));
+  const { encode } = require(path.join(frontend, 'node_modules/next-auth/jwt'));
+  await fs.access(path.join(frontend, '.next/BUILD_ID'));
+  await prisma.sportsCampaign.update({ where: { id: campaignId }, data: { status: 'PUBLISHED' } });
+  const before = await prisma.fanSelection.count({ where: { campaignId } });
+  const backendPort = app.getHttpServer().address().port;
+  const probe = require('node:net').createServer();
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const frontendPort = probe.address().port; await new Promise(resolve => probe.close(resolve));
+  const origin = `http://127.0.0.1:${frontendPort}`;
+  const authSecret = randomBytes(32).toString('hex');
+  const childEnv = { ...process.env, NODE_ENV: 'production', SPORTS_BACKEND_URL: `http://127.0.0.1:${backendPort}`, SPORTS_PUBLIC_ORIGIN: origin, AUTH_SECRET: authSecret, NEXTAUTH_URL: origin, AUTH_URL: origin };
+  delete childEnv.ATLAS_API_KEY; delete childEnv.ATLAS_API_URL; delete childEnv.VERCEL;
+  frontendProcess = spawn(process.execPath, [path.join(frontend, 'node_modules/next/dist/bin/next'), 'start', '--hostname', '127.0.0.1', '--port', String(frontendPort)], { cwd: frontend, env: childEnv, stdio: 'ignore' });
+  let ready = false;
+  for (let i = 0; i < 80; i++) { if (frontendProcess.exitCode !== null) break; try { const res = await fetch(origin + '/api/sports/campaigns/fixture-http-demo'); if (res.ok) { ready = true; break; } } catch {} await new Promise(resolve => setTimeout(resolve, 250)); }
+  assert.ok(ready, 'Next.js must serve the real backend campaign');
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox'] });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  const authCalls = []; page.on('request', req => { if (/\/api\/auth/.test(req.url())) authCalls.push(req.url()); });
+  await require('qrcode').toFile(path.join(path.resolve('.tmp/sports-test'), 'campaign-qr.png'), origin + '/fan/fixture-http-demo');
+  await page.goto(origin + '/fan/fixture-http-demo');
+  await page.getByRole('radio').first().check();
+  assert.equal(await page.getByRole('radio').count(), 3);
+  await page.getByRole('button', { name: 'Back this project' }).click();
+  await page.getByRole('link', { name: 'View and save my badge' }).waitFor();
+  const claimPath = await page.getByRole('link', { name: 'View and save my badge' }).getAttribute('href');
+  await page.reload(); await page.getByRole('link', { name: 'View and save my badge' }).click();
+  await page.getByRole('heading', { name: 'Nature Backer', exact: true }).waitFor();
+  assert.equal(await prisma.fanSelection.count({ where: { campaignId } }), before + 1);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  assert.equal(authCalls.length, 0);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download my badge' }).click()]);
+  assert.equal(await download.failure(), null);
+  assert.match(await fs.readFile(await download.path(), 'utf8'), /DEVELOPMENT FIXTURE/);
+  const securityHeaders = await page.request.get(origin + '/api/sports/rewards/' + claimPath.split('/').at(-1) + '/download');
+  assert.match(securityHeaders.headers()['content-security-policy'], /sandbox/);
+  const clean = await browser.newContext(); const saved = await clean.newPage();
+  await saved.goto(origin + claimPath); await saved.getByRole('heading', { name: 'Nature Backer', exact: true }).waitFor(); await clean.close();
+  assert.equal((await page.request.get(origin + '/api/sports/results/fixture-http-demo')).status(), 401);
+  const operatorCookie = await encode({ secret: authSecret, maxAge: 3600, token: { sub: 'local-test-operator', email: 'operator@example.test', sportsEmailVerified: true, name: 'Local test operator' } });
+  await context.addCookies([{ name: 'next-auth.session-token', value: operatorCookie, url: origin, httpOnly: true, sameSite: 'Lax' }]);
+  const reportResponse = await page.request.get(origin + '/api/sports/results/fixture-http-demo');
+  assert.equal(reportResponse.status(), 200); const report = await reportResponse.json();
+  assert.equal(report.acceptedSelections, before + 1); assert.equal(report.rewardsIssued, before + 1);
+  await page.setViewportSize({ width: 1280, height: 900 }); await page.goto(origin + '/admin/sports/fixture-http-demo');
+  await page.getByText('Digital badges issued', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('progressbar').count(), 3);
+  assert.match(await page.locator('.fan-note').first().textContent(), /Not disbursed/);
+  assert.deepEqual(await page.locator('.fan-metrics strong').allTextContents(), [String(before + 1), String(before + 1)]);
+  await context.close();
+  console.log('PASS: unmocked mobile Next.js → NestJS → PostgreSQL journey, QR URL generation, three projects, receipt reload, persistent claim in clean browser, actual SVG download, no fan auth calls, signed-session protected reporting and dashboard/storage counts.');
+}
 async function main() {
   const temp = path.resolve('.tmp/sports-test'); await fs.mkdir(temp, { recursive: true });
+  const native = process.argv.includes('--native');
+  if (!native) {
   const schema = (await fs.readFile('prisma/schema.prisma', 'utf8')).replace('provider = "prisma-client-js"', `provider = "prisma-client-js"\n  engineType = "client"\n  output = ${JSON.stringify(path.join(temp, 'client'))}`);
   const schemaPath = path.join(temp, 'schema.prisma'); await fs.writeFile(schemaPath, schema);
   const generators = await getGenerators({ schemaPath, registry: { 'prisma-client-js': { type: 'rpc', generatorPath: require.resolve('@prisma/client/generator-build'), isNode: true } }, skipDownload: true });
   try { for (const generator of generators) { generator.options.generator.output.value = path.join(temp, 'client'); await generator.generate(); } }
   finally { generators.forEach(generator => generator.stop()); }
+  }
   docker('run', '--rm', '-d', '--name', name, '-e', 'POSTGRES_DB=sports_http_disposable', '-e', `POSTGRES_PASSWORD=${password}`, '-p', '127.0.0.1::5432', 'postgres:16');
   const port = Number(docker('port', name, '5432/tcp').split(':').at(-1));
   const config = { host: '127.0.0.1', port, user: 'postgres', password, database: 'sports_http_disposable' };
+  phase = 'disposable-db-startup';
   for (let i = 0; i < 40; i++) { const candidate = new pg.Client(config); try { await candidate.connect(); db = candidate; break; } catch { await candidate.end().catch(() => {}); await new Promise(r => setTimeout(r, 250)); } }
   assert.ok(db, 'Disposable database must start');
+  phase = 'disposable-schema';
   await db.query(await fs.readFile('prisma/migrations/20261009000000_add_isolated_sports_demo/migration.sql', 'utf8'));
   await db.query(`CREATE TABLE "Campaign" (id INTEGER PRIMARY KEY); CREATE TABLE "Project" (id INTEGER PRIMARY KEY); CREATE TABLE legacy_effects (id SERIAL); CREATE FUNCTION legacy_probe() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO legacy_effects DEFAULT VALUES; RETURN NEW; END $$; CREATE TRIGGER legacy_campaign_probe AFTER INSERT OR UPDATE ON "Campaign" FOR EACH ROW EXECUTE FUNCTION legacy_probe(); CREATE TRIGGER legacy_project_probe AFTER INSERT OR UPDATE ON "Project" FOR EACH ROW EXECUTE FUNCTION legacy_probe();`);
-  const { PrismaClient } = require(path.join(temp, 'client'));
-  prisma = new PrismaClient({ adapter: new PrismaPg(config) });
+  const { PrismaClient } = native ? require('@prisma/client') : require(path.join(temp, 'client'));
+  // Explicit disposable URL: never use the application's DATABASE_URL binding.
+  prisma = native ? new PrismaClient({ datasources: { db: { url: `postgresql://postgres:${password}@127.0.0.1:${port}/sports_http_disposable` } } }) : new PrismaClient({ adapter: new PrismaPg(config) });
+  const transaction = prisma.$transaction.bind(prisma);
+  prisma.$transaction = async (...args) => { try { return await transaction(...args); } catch (error) { const code = /^[A-Z0-9_]+$/.test(error.code || '') ? error.code : 'UNKNOWN'; transactionFailures[code] = (transactionFailures[code] || 0) + 1; throw error; } };
   prisma.onModuleInit = () => prisma.$connect(); prisma.onModuleDestroy = () => prisma.$disconnect();
   process.env.SPORTS_ADMIN_JWT_SECRET = randomBytes(32).toString('hex');
   process.env.SPORTS_PARTICIPANT_SECRET = randomBytes(32).toString('hex');
   process.env.SPORTS_CLAIM_KEYS = JSON.stringify({ v1: randomBytes(32).toString('hex') });
   process.env.SPORTS_ADMIN_EMAILS = 'operator@example.test'; process.env.SPORTS_ALLOW_FIXTURES = 'true'; process.env.NODE_ENV = 'test';
   const { SportsModule } = require('../dist/src/sports/sports.module');
+  phase = 'nest-startup';
   const { PrismaService } = require('../dist/prisma/prisma.service');
   const module = await Test.createTestingModule({ imports: [SportsModule] }).overrideProvider(PrismaService).useValue(prisma).compile();
   app = module.createNestApplication(); app.useLogger(false); await app.init();
+  // Keep one listener for concurrent requests; Supertest auto-close races otherwise.
+  await app.listen(0, '127.0.0.1');
   let api = request(app.getHttpServer());
   const signed = await new SignJWT({ email: 'operator@example.test', email_verified: true }).setProtectedHeader({ alg: 'HS256' }).setSubject('local-test-operator').setIssuer('nature-backers-frontend').setAudience('sports-admin').setIssuedAt().setExpirationTime('60s').sign(Buffer.from(process.env.SPORTS_ADMIN_JWT_SECRET));
   const admin = req => req.set('Authorization', `Bearer ${signed}`);
+  phase = 'http-contracts';
   await api.post('/admin/sports-campaigns').send({ userId: 1 }).expect(401);
   const created = await admin(api.post('/admin/sports-campaigns')).send({ slug: 'fixture-http-demo', name: 'Fixture demonstration', event: 'Fictional sports event', startsAt: new Date(Date.now() - 60000).toISOString(), endsAt: new Date(Date.now() + 3600000).toISOString(), commitmentAmount: '100.00', commitmentCurrency: 'USD' }).expect(201);
   const campaignId = created.body.id;
   await api.get('/public/sports-campaigns/fixture-http-demo').expect(404);
+  await admin(api.post(`/admin/sports-campaigns/${campaignId}/publish`)).expect(409);
+  await admin(api.put(`/admin/sports-campaigns/${campaignId}/ballot`)).send({ sourceTimestamps: ['fixture-wetlands', 'fixture-forest'] }).expect(400);
   await admin(api.put(`/admin/sports-campaigns/${campaignId}/ballot`)).send({ sourceTimestamps: ['fixture-wetlands', 'fixture-forest', 'fixture-coast'] }).expect(200);
   await admin(api.post(`/admin/sports-campaigns/${campaignId}/publish`)).expect(201);
   const campaign = (await api.get('/public/sports-campaigns/fixture-http-demo').expect(200)).body;
@@ -56,6 +129,14 @@ async function main() {
   const first = (await submit(payload).expect(201)).body;
   const replay = (await submit(payload).expect(201)).body;
   assert.equal(replay.rewardId, first.rewardId); assert.equal(replay.claimToken, first.claimToken); assert.equal(replay.replay, true);
+  // A signing failure after inserts must roll back BOTH selection and reward.
+  const originalKeys = process.env.SPORTS_CLAIM_KEYS;
+  try {
+    process.env.SPORTS_CLAIM_KEYS = JSON.stringify({ unavailableVersion: randomBytes(32).toString('hex') });
+    await submit({ participantId: randomUUID(), idempotencyKey: randomUUID(), ballotProjectId: campaign.projects[2].id }).expect(500);
+    assert.equal(await prisma.fanSelection.count({ where: { campaignId } }), 1);
+    assert.equal(await prisma.rewardIssuance.count({ where: { selection: { campaignId } } }), 1);
+  } finally { process.env.SPORTS_CLAIM_KEYS = originalKeys; }
   await submit({ ...payload, idempotencyKey: randomUUID(), ballotProjectId: campaign.projects[1].id }).expect(409);
   await submit({ ...payload, participantId: randomUUID() }).expect(409);
   await submit({ participantId: randomUUID(), idempotencyKey: randomUUID(), ballotProjectId: randomUUID() }).expect(400);
@@ -70,11 +151,17 @@ async function main() {
   const results = (await admin(api.get('/admin/sports-campaigns/fixture-http-demo/results')).expect(200)).body;
   assert.equal(results.acceptedSelections, 2); assert.equal(results.rewardsIssued, 2); assert.match(results.commitment.label, /not disbursed/);
   assert.equal(results.projects.reduce((sum, p) => sum + Math.round(Number(p.illustrativeAllocation) * 100), 0), 10000);
+  const burst = await Promise.all(Array.from({ length: 20 }, () => submit({ participantId: randomUUID(), idempotencyKey: randomUUID(), ballotProjectId: campaign.projects[2].id })));
+  if (burst.some(response => response.status !== 201)) console.error(JSON.stringify({ burstHttpStatuses: burst.map(response => response.status), transactionFailures }));
+  assert.ok(burst.every(response => response.status === 201), `Distinct participant burst failed: ${burst.map(response => response.status).join(',')}`);
+  assert.equal(await prisma.fanSelection.count({ where: { campaignId } }), 22);
+  assert.equal(await prisma.rewardIssuance.count({ where: { selection: { campaignId } } }), 22);
+  phase = 'restart-and-rate-limit';
   await prisma.$disconnect(); await prisma.$connect();
   assert.equal((await api.get(`/public/rewards/${first.claimToken}`).expect(200)).body.id, first.rewardId);
   await app.close();
   const restarted = await Test.createTestingModule({ imports: [SportsModule] }).overrideProvider(PrismaService).useValue(prisma).compile();
-  app = restarted.createNestApplication(); app.useLogger(false); await app.init(); api = request(app.getHttpServer());
+  app = restarted.createNestApplication(); app.useLogger(false); await app.init(); await app.listen(0, '127.0.0.1'); api = request(app.getHttpServer());
   assert.equal((await api.get(`/public/rewards/${first.claimToken}`).expect(200)).body.id, first.rewardId);
   const limited = { participantId: randomUUID(), idempotencyKey: randomUUID(), ballotProjectId: campaign.projects[2].id };
   for (let i = 0; i < 10; i++) await submit(limited).expect(201);
@@ -84,6 +171,8 @@ async function main() {
   assert.equal((await db.query('SELECT count(*)::int AS count FROM legacy_effects')).rows[0].count, 0);
   assert.equal((await db.query('SELECT count(*)::int AS count FROM "Campaign"')).rows[0].count, 0);
   assert.equal((await db.query('SELECT count(*)::int AS count FROM "Project"')).rows[0].count, 0);
-  console.log('PASS: actual sports HTTP creation/curation/publication, anonymous selection persistence, idempotent/concurrent retries, conflicts, immutable ballot, persistent badge/download, report authorization/counts/funding labels, rate limiting, closed campaign rejection, zero legacy writes or automation.');
+  if (process.argv.includes('--browser')) await browserJourney(campaignId);
+  console.log(`PASS (${native ? 'native Prisma' : 'test-only WASM adapter'}): actual sports HTTP creation/curation/publication, anonymous selection persistence, idempotent/concurrent retries, conflicts, immutable ballot, persistent badge/download, report authorization/counts/funding labels, rate limiting, closed campaign rejection, zero legacy writes or automation.`);
 }
-main().catch(error => { console.error(`FAIL: sports HTTP integration (${error.code || error.message || 'setup failure'})`); process.exitCode = 1; }).finally(async () => { if (app) await app.close().catch(() => {}); if (prisma) await prisma.$disconnect().catch(() => {}); if (db) await db.end().catch(() => {}); try { docker('rm', '-f', name); } catch {} });
+const cleanup = async fn => Promise.race([Promise.resolve().then(fn).catch(() => {}), new Promise(resolve => setTimeout(resolve, 2000))]);
+main().catch(error => { console.error(`FAIL: sports HTTP integration (${phase}; ${error.code || 'assertion/setup failure'})`); process.exitCode = 1; }).finally(async () => { if (browser) await cleanup(() => browser.close()); if (frontendProcess) frontendProcess.kill('SIGTERM'); if (app) await cleanup(() => app.close()); if (prisma) await cleanup(() => prisma.$disconnect()); if (db) await cleanup(() => db.end()); try { docker('rm', '-f', name); } catch {} if (process.exitCode) process.exit(process.exitCode); });

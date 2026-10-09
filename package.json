@@ -28,7 +28,10 @@
     "test:atlas-verifier": "node --test scripts/verify-atlas.test.mjs",
     "test:sports-schema": "node scripts/test-sports-schema.mjs",
     "build:sports-tests": "node scripts/generate-test-types.cjs && nest build",
-    "test:sports-integration": "node scripts/test-sports-integration.cjs"
+    "test:sports-integration": "node scripts/test-sports-integration.cjs",
+    "test:sports-browser-integration": "node scripts/test-sports-integration.cjs --browser",
+    "test:employee-compatibility": "jest --runInBand --testPathPattern=employee-compatibility",
+    "test:sports-native-integration": "node scripts/test-sports-integration.cjs --native --browser"
   },
   "dependencies": {
     "@adminjs/express": "^6.1.1",
