@@ -202,3 +202,84 @@ enum VotingStyle {
   STORY_FEATURE
   THEMED_BADGES
 }
+
+// Sports-only persistence: no relations to legacy Campaign, Project, User or Vote.
+enum SportsCampaignStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+}
+
+model SportsCampaign {
+  id                  String               @id @default(uuid()) @db.Uuid
+  slug                String               @unique
+  name                String
+  league              String?
+  team                String?
+  sponsor             String?
+  event               String
+  venue               String?
+  partners            Json?
+  startsAt            DateTime
+  endsAt              DateTime
+  status              SportsCampaignStatus @default(DRAFT)
+  commitmentAmount    Decimal?             @db.Decimal(18, 2)
+  commitmentCurrency  String?              @db.VarChar(3)
+  rewardType          String               @default("DIGITAL_BADGE")
+  rewardConfig        Json
+  publishedAt         DateTime?
+  createdBySubject    String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ballot              SportsBallotProject[]
+  selections          FanSelection[]
+}
+
+model AtlasProject {
+  id              Int                  @id @default(autoincrement())
+  sourceTimestamp String               @unique
+  metadata        Json
+  fetchedAt       DateTime
+  ballot          SportsBallotProject[]
+}
+
+model SportsBallotProject {
+  id             String         @id @default(uuid()) @db.Uuid
+  campaignId     String         @db.Uuid
+  atlasProjectId Int
+  position       Int
+  snapshot       Json
+  campaign       SportsCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  atlasProject   AtlasProject   @relation(fields: [atlasProjectId], references: [id], onDelete: Restrict)
+  selections     FanSelection[]
+
+  @@unique([campaignId, atlasProjectId])
+  @@unique([campaignId, position])
+  @@unique([id, campaignId])
+}
+
+model FanSelection {
+  id             String              @id @default(uuid()) @db.Uuid
+  campaignId     String              @db.Uuid
+  ballotProjectId String             @db.Uuid
+  participantHash String
+  idempotencyKey  String             @db.Uuid
+  createdAt      DateTime            @default(now())
+  campaign       SportsCampaign      @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  ballotProject  SportsBallotProject @relation(fields: [ballotProjectId, campaignId], references: [id, campaignId], onDelete: Restrict)
+  reward         RewardIssuance?
+
+  @@unique([campaignId, participantHash])
+  @@unique([campaignId, idempotencyKey])
+  @@index([campaignId, ballotProjectId])
+}
+
+model RewardIssuance {
+  id              String       @id @default(uuid()) @db.Uuid
+  selectionId     String       @unique @db.Uuid
+  rewardType      String
+  snapshot        Json
+  claimKeyVersion String
+  issuedAt        DateTime     @default(now())
+  selection       FanSelection @relation(fields: [selectionId], references: [id], onDelete: Restrict)
+}

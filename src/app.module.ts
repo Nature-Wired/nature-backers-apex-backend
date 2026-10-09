@@ -1,3 +1,4 @@
+import { SportsModule } from './sports/sports.module';
 import { Module } from '@nestjs/common';
 import { AdminModule } from './admin/admin.module';
 import { CampaignModule } from './campaign/campaign.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [
+    SportsModule,
     AdminModule,
     CampaignModule,
     ProjectModule,
