@@ -1,6 +1,6 @@
 # Isolated AWS staging plan — review only
 
-Prepared 2026-10-09 (America/Los_Angeles). No AWS resources, infrastructure, production databases or deployments were changed. This extends the approved feature branches. Target: OC Sports Summit October 12, 2026; event time still needed. Use the existing Nature Wired AWS account, with account ID/region/role unconfirmed. Cost scenario uses us-west-2, not a discovered deployment region. AWS-generated staging HTTPS URLs are acceptable. Budget and badge-retention owner remain unconfirmed.
+Prepared 2026-10-09 (America/Los_Angeles). No AWS resources, infrastructure, production databases or deployments were changed. This extends the approved feature branches. Updated target: OC Sports Summit October 15, 2026; event time still needed. Use the existing Nature Wired AWS account, with account ID/region/role unconfirmed. Cost scenario uses us-west-2, not a discovered deployment region. AWS-generated staging HTTPS URLs are acceptable. Budget and badge-retention owner remain unconfirmed. The three-project shortlist is explicitly pending approval; keep any live campaign DRAFT and never run auto-publishing configure:sports before separate publication authorization.
 
 ## Existing resources: known URLs, unverified mapping
 
@@ -101,7 +101,7 @@ A seven-day rehearsal/event allocation is roughly $15–30 with setup/build over
 
 ## Deadline and information/approval needed
 
-October 9: source and isolated testing are complete; resolve the Atlas binding and AWS/OAuth inputs now. October 10: target live shortlist approval, staging release approval and isolated provisioning/smoke validation. October 11: target phone/backup/authorization rehearsal. October 12: demonstration. These are readiness targets, not permission to deploy or a delivery promise while external prerequisites remain unresolved. If authorization/OAuth/Atlas prerequisites are not available in time, report the incomplete live demonstration honestly; do not substitute fixtures for real projects or expose reporting publicly.
+October 9: source and isolated testing are complete; owner reports live compiled-adapter verification passed on Mac. Codex proxy routing remains separate and should not drive API/plugin changes. October 10–12: target AWS/OAuth/retention decisions and explicit staging provisioning approval, then isolated provisioning/build/authentication checks. October 13: target approved live DRAFT curation and stored snapshot verification. October 14: target separately authorized campaign publication and real-phone/backup/authorization rehearsal. October 15: demonstration. These are readiness targets, not permission to deploy or a delivery promise while prerequisites remain unresolved. Do not substitute fixtures for real projects or expose reporting publicly.
 
 ## Fresh-task handoff: next action for the owner
 
