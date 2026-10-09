@@ -120,7 +120,12 @@ async function main() {
   await admin(api.post(`/admin/sports-campaigns/${campaignId}/publish`)).expect(409);
   await admin(api.put(`/admin/sports-campaigns/${campaignId}/ballot`)).send({ sourceTimestamps: ['fixture-wetlands', 'fixture-forest'] }).expect(400);
   await admin(api.put(`/admin/sports-campaigns/${campaignId}/ballot`)).send({ sourceTimestamps: ['fixture-wetlands', 'fixture-forest', 'fixture-coast'] }).expect(200);
+  // Disposable-only country presentation regression: preserve source snapshots.
+  await db.query(`UPDATE "SportsBallotProject" SET snapshot=jsonb_set(snapshot, '{country}', '"-2"'::jsonb) WHERE "campaignId"=$1`, [campaignId]);
   await admin(api.post(`/admin/sports-campaigns/${campaignId}/publish`)).expect(201);
+  const publicBallot = (await api.get('/public/sports-campaigns/fixture-http-demo').expect(200)).body;
+  assert.ok(publicBallot.projects.every(p => p.country === null));
+  assert.ok((await db.query(`SELECT snapshot->>'country' AS country FROM "SportsBallotProject" WHERE "campaignId"=$1`, [campaignId])).rows.every(p => p.country === '-2'));
   const campaign = (await api.get('/public/sports-campaigns/fixture-http-demo').expect(200)).body;
   assert.equal(campaign.projects.length, 3); assert.equal(campaign.fixture, true);
   await admin(api.put(`/admin/sports-campaigns/${campaignId}/ballot`)).send({ sourceTimestamps: ['fixture-wetlands', 'fixture-forest', 'fixture-coast'] }).expect(409);
@@ -145,6 +150,8 @@ async function main() {
   assert.ok(races.every(r => r.status === 201), 'Concurrent retries must all succeed'); assert.equal(new Set(races.map(r => r.body.rewardId)).size, 1);
   const badge = (await api.get(`/public/rewards/${first.claimToken}`).expect(200)).body;
   assert.equal(badge.snapshot.fixture, true); assert.equal(badge.id, first.rewardId);
+  assert.equal(badge.snapshot.project.country, null);
+  assert.equal((await db.query(`SELECT snapshot->'project'->>'country' AS country FROM "RewardIssuance" WHERE id=$1`, [first.rewardId])).rows[0].country, '-2');
   await api.get(`/public/rewards/${first.claimToken}x`).expect(404);
   const download = await api.get(`/public/rewards/${first.claimToken}/download`).expect(200); assert.match(download.headers['content-type'], /image\/svg\+xml/);
   await api.get('/admin/sports-campaigns/fixture-http-demo/results').expect(401);

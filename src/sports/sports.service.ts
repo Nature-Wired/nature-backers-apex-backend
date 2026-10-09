@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SportsAtlasService } from './atlas.service';
 import { claimToken, verifyClaim } from './reward';
 import { requiredSecret } from './security';
+import { publicProject } from './presentation';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function requireUuid(value: any) { if (typeof value !== 'string' || !uuid.test(value)) throw new BadRequestException('Invalid request identifier'); }
 function text(value: any, required = false) {
@@ -70,7 +71,7 @@ export class SportsService {
     return { slug: c.slug, name: c.name, event: c.event, league: c.league, team: c.team, sponsor: c.sponsor, venue: c.venue,
       startsAt: c.startsAt, endsAt: c.endsAt, open: c.status === 'PUBLISHED' && c.startsAt <= new Date() && c.endsAt > new Date(),
       fixture: c.ballot.some(p => (p.snapshot as any).provenance === 'DEVELOPMENT_FIXTURE'),
-      projects: c.ballot.map(p => ({ id: p.id, position: p.position, ...(p.snapshot as any) })) };
+      projects: c.ballot.map(p => ({ id: p.id, position: p.position, ...publicProject(p.snapshot) })) };
   }
   async select(slug: string, input: any) {
     requireUuid(input?.ballotProjectId); requireUuid(input?.participantId); requireUuid(input?.idempotencyKey);
@@ -114,7 +115,8 @@ export class SportsService {
     const reward = await this.db.rewardIssuance.findUnique({ where: { id } });
     if (!reward) throw new NotFoundException();
     verifyClaim(token, reward);
-    return { id: reward.id, rewardType: reward.rewardType, snapshot: reward.snapshot, issuedAt: reward.issuedAt };
+    const snapshot = reward.snapshot as any;
+    return { id: reward.id, rewardType: reward.rewardType, snapshot: { ...snapshot, project: publicProject(snapshot.project) }, issuedAt: reward.issuedAt };
   }
   async results(slug: string) {
     const c = await this.db.sportsCampaign.findUnique({ where: { slug }, include: { ballot: { orderBy: { position: 'asc' } } } });
