@@ -31,6 +31,7 @@ Record the commit and SHA-256 independently of the S3 object. git archive ZIP in
 - Archive SHA-256 and embedded commit match the approved values.
 - Sports lock contains no CarbonSustain/Indexer/Git artifacts; all resolved artifacts are npm registry HTTPS.
 - Docker build succeeds; image is amd64, USER=node and exact CMD=node dist/src/sports/main.js.
+- Packaging tests receive the verified sports lockfile through a read-only test-only mount at /app/package-lock.json. The production image and subsequent application health container do not contain/mount this file; it is a build/test input, not a runtime dependency.
 - Actual sports startup uses only temporary PostgreSQL and random test signing values.
 - GET /health/sports/live returns 200 with exactly {"status":"ok"}.
 - GET /health/sports returns 503 because no tables or migrations exist.

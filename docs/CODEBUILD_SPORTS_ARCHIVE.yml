@@ -69,9 +69,11 @@ phases:
         test "$(docker image inspect --format '{{.Architecture}}' "$prefix:smoke")" = amd64
         stage=isolated-plugin-tests
         # ZIP extraction under umask 077 produces a root-owned 0600 script.
-        # Make only this non-sensitive test file readable by the container's node user.
-        chmod 0444 "$work/source/scripts/test-sports-packaging.cjs"
-        docker run --rm --name "$prefix-check" --network none --entrypoint node -e SPORTS_PACKAGE_TEST_DIR=/app --mount "type=bind,src=$work/source/scripts/test-sports-packaging.cjs,dst=/tmp/test-sports-packaging.cjs,readonly" "$prefix:smoke" --test /tmp/test-sports-packaging.cjs
+        # Make only these non-sensitive test inputs readable by the container's node user.
+        chmod 0444 "$work/source/scripts/test-sports-packaging.cjs" "$work/source/packaging/sports/package-lock.json"
+        # Runtime intentionally omits the lockfile. Expose the verified build input
+        # read-only for this packaging test only; do not add it to the image.
+        docker run --rm --name "$prefix-check" --network none --entrypoint node -e SPORTS_PACKAGE_TEST_DIR=/app --mount "type=bind,src=$work/source/scripts/test-sports-packaging.cjs,dst=/tmp/test-sports-packaging.cjs,readonly" --mount "type=bind,src=$work/source/packaging/sports/package-lock.json,dst=/app/package-lock.json,readonly" "$prefix:smoke" --test /tmp/test-sports-packaging.cjs
         stage=temporary-database
         password=$(openssl rand -hex 24)
         participant=$(openssl rand -hex 32)
