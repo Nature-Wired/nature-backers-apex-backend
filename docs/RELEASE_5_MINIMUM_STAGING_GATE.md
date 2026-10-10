@@ -56,7 +56,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 
 Before any infrastructure creation, settle these remaining decisions:
 
-- VPC DNS resolution and DNS hostnames are confirmed Enabled. Public subnet IDs/free IPs are recorded above. Existing public-subnet NACL compatibility is confirmed. Selected-subnet route-table associations and IGW routes are confirmed. Review the new security-group rule matrix before authorizing creation. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
+- VPC DNS resolution and DNS hostnames are confirmed Enabled. Public subnet IDs/free IPs are recorded above. Existing public-subnet NACL compatibility is confirmed. Selected-subnet route-table associations and IGW routes are confirmed. Review the new security-group rule matrix and resolve Express generated-ALB/custom-task-SG behavior before authorizing creation. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
 - Confirm one-task CPU/memory and maximum scaling, actual Express role/secret settings and readiness configuration. Public task IPs are for egress, not direct inbound application access.
 - Select PostgreSQL class/version, encryption/backups/deletion policy, least-privilege application grants, trusted RDS CA delivery and private migration runner. Schema setup remains separately approved.
 - Establish staging OAuth owner/client, verified administrator allowlist and Amplify SSR source/runtime secret delivery. Never expose administration/reporting when OAuth is unavailable.
@@ -83,3 +83,25 @@ No inbound TCP5432 from internet or whole VPC CIDR; no direct internet TCP8080; 
 Express manages ALB resources/groups: inspect its creation configuration to establish how its generated ALB SG and selected task SG will be linked, without opening task8080 publicly as a bootstrap workaround. Review the required staging-only execution/infrastructure roles separately. This rule matrix review is a prerequisite, not permission to create groups or services.
 
 After network-rule agreement, settle RDS CA/TLS delivery and migration runner, PostgreSQL credentials/app grants, stable reward signing secrets, new Amplify SSR secret/source configuration and staging Google OAuth. Explicit resource creation, database SQL, deployment and campaign publication remain separate approvals.
+
+## Unresolved Express security-group behavior — deployment blocker
+
+Owner inspected the Console read-only: Customize networking is available; VPC vpc-0fb4c77da1221cbe3, custom subnets and custom security groups are selectable. Only existing group offered is VPC default sg-0de6b03a7901c97ab. No tooltip explains generated ALB-to-task group linkage. No resource or security-group changes occurred. Do not select/reuse this default group as a shortcut.
+
+The agent inspected AWS's current published ECS API model (boto/botocore develop, ecs/2014-11-13/service-2.json) and current Terraform resource documentation. AWS CreateExpressGatewayService describes networkConfiguration as configuring task subnets/security groups; its infrastructure role may provision/manage ALBs and security groups. Neither retrieved source explicitly promises an ALB-source-only inbound rule on a supplied group, identifies which groups are additionally attached, or states whether customer rules are mutated. Terraform similarly describes the group field as task-associated, without resolving generated linkage. The official Developer Guide request remains blocked by this environment's network proxy (HTTP403); no direct guide verification is claimed. Ability to manage SGs is not proof of the actual rule behavior.
+
+Sources:
+- https://github.com/boto/botocore/blob/develop/botocore/data/ecs/2014-11-13/service-2.json
+- https://github.com/hashicorp/terraform-provider-aws/blob/main/website/docs/r/ecs_express_gateway_service.html.markdown
+- Official guide for owner-side verification: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
+
+Required supported behavior must be established before recommending deployment:
+1. Which SGs Express attaches to the generated ALB versus task ENIs when custom securityGroups are supplied.
+2. Whether Express adds/changes inbound rules on the supplied task SG, and the exact source of the TCP8080 permission.
+3. Whether any additional generated task SG permits broader ingress. Attached SG permissions are additive; one restricted group does not negate another broader rule.
+4. Supported method to make task8080 reachable only from the ALB SG, while preserving managed updates/deletion and avoiding direct internet/VPC-wide task ingress.
+5. Whether generated ALB SG identity can be determined/configured before task ingress is established without a temporary broad access rule.
+
+Next prerequisite: obtain explicit official guide text or an AWS support answer for those questions. No service creation solely to discover behavior is authorized. Existing-network routing/DNS/NACL/IP capacity checks remain satisfied, but security-group wiring is unresolved. The default group's own rules have not been inspected here and its name does not establish suitability.
+
+If Express cannot provide the required linkage, review standard ECS/Fargate with explicitly controlled ALB/task/DB SG references as a separately approved alternative. It preserves the image/entrypoint and has similar base resource costs, but requires its own trusted HTTPS/domain/certificate design; do not assume Express's generated domain transfers to standard ECS. No architecture pivot or resources are authorized. PostgreSQL5432 must remain limited to approved task/migration groups regardless of the Express choice.
