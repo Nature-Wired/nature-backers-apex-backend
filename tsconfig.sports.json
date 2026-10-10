@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+    "incremental": false
+  },
+  "files": ["src/sports/main.ts"],
+  "include": [],
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
+}

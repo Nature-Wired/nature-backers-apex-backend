@@ -7,9 +7,13 @@ const assert = require('node:assert/strict');
 const pg = require('pg');
 const { getGenerators } = require('@prisma/internals');
 const { PrismaPg } = require('@prisma/adapter-pg');
-const { Test } = require('@nestjs/testing');
 const request = require('supertest');
 const { SignJWT } = require('jose');
+// Optional isolated sports artifact; default preserves the shared regression path.
+const sportsArtifact = process.env.SPORTS_PACKAGE_TEST_DIR ? path.resolve(process.env.SPORTS_PACKAGE_TEST_DIR) : path.resolve('.');
+const artifactRequire = require('node:module').createRequire(path.join(sportsArtifact, 'package.json'));
+// Nest's test factory must share the artifact's Nest classes (including HttpException).
+const { Test } = artifactRequire('@nestjs/testing');
 const name = `nature-sports-http-${randomUUID()}`;
 const password = randomBytes(24).toString('hex');
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -92,7 +96,7 @@ async function main() {
   phase = 'disposable-schema';
   await db.query(await fs.readFile('prisma/migrations/20261009000000_add_isolated_sports_demo/migration.sql', 'utf8'));
   await db.query(`CREATE TABLE "Campaign" (id INTEGER PRIMARY KEY); CREATE TABLE "Project" (id INTEGER PRIMARY KEY); CREATE TABLE legacy_effects (id SERIAL); CREATE FUNCTION legacy_probe() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN INSERT INTO legacy_effects DEFAULT VALUES; RETURN NEW; END $$; CREATE TRIGGER legacy_campaign_probe AFTER INSERT OR UPDATE ON "Campaign" FOR EACH ROW EXECUTE FUNCTION legacy_probe(); CREATE TRIGGER legacy_project_probe AFTER INSERT OR UPDATE ON "Project" FOR EACH ROW EXECUTE FUNCTION legacy_probe();`);
-  const { PrismaClient } = native ? require('@prisma/client') : require(path.join(temp, 'client'));
+  const { PrismaClient } = native ? artifactRequire('@prisma/client') : require(path.join(temp, 'client'));
   // Explicit disposable URL: never use the application's DATABASE_URL binding.
   prisma = native ? new PrismaClient({ datasources: { db: { url: `postgresql://postgres:${password}@127.0.0.1:${port}/sports_http_disposable` } } }) : new PrismaClient({ adapter: new PrismaPg(config) });
   const transaction = prisma.$transaction.bind(prisma);
@@ -102,9 +106,9 @@ async function main() {
   process.env.SPORTS_PARTICIPANT_SECRET = randomBytes(32).toString('hex');
   process.env.SPORTS_CLAIM_KEYS = JSON.stringify({ v1: randomBytes(32).toString('hex') });
   process.env.SPORTS_ADMIN_EMAILS = 'operator@example.test'; process.env.SPORTS_ALLOW_FIXTURES = 'true'; process.env.NODE_ENV = 'test';
-  const { SportsModule } = require('../dist/src/sports/sports.module');
+  const { SportsModule } = artifactRequire('./dist/src/sports/sports.module');
   phase = 'nest-startup';
-  const { PrismaService } = require('../dist/prisma/prisma.service');
+  const { PrismaService } = artifactRequire('./dist/prisma/prisma.service');
   const module = await Test.createTestingModule({ imports: [SportsModule] }).overrideProvider(PrismaService).useValue(prisma).compile();
   app = module.createNestApplication(); app.useLogger(false); await app.init();
   // Keep one listener for concurrent requests; Supertest auto-close races otherwise.

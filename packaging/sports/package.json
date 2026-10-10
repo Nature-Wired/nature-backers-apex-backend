@@ -1,0 +1,29 @@
+{
+  "name": "nature-backers-sports-backend",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.sports.json",
+    "start": "node dist/src/sports/main.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "10.4.22",
+    "@nestjs/core": "10.4.22",
+    "@nestjs/platform-express": "10.4.22",
+    "@prisma/client": "6.19.2",
+    "@nature-wired/hedera-guardian-agent-plugin": "0.1.0",
+    "@hashgraph/hedera-agent-kit": "4.1.0",
+    "dotenv": "16.6.1",
+    "jose": "5.10.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "prisma": "6.19.2",
+    "typescript": "5.9.3",
+    "@types/node": "24.11.0",
+    "@types/express": "5.0.6",
+    "@nestjs/testing": "10.4.22"
+  }
+}
