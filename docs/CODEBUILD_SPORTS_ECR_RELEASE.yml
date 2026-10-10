@@ -1,0 +1,151 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - |
+        set -Eeuo pipefail
+        set +x
+        umask 077
+        expected=${PINNED_SOURCE_COMMIT:?Set approved commit}
+        [[ "$expected" =~ ^[0-9a-f]{40}$ ]]
+        [[ "${SOURCE_ARCHIVE_SHA256:?Set approved archive checksum}" =~ ^[0-9a-f]{64}$ ]]
+        test "$expected" = e088567351ef6b5ef634fe08bb88a03a0f1a7573
+        prefix="sports-smoke-${CODEBUILD_BUILD_NUMBER}"
+        work=$(mktemp -d)
+        stage=source
+        image_built=false
+        startup=false
+        live=not-tested
+        ready=not-tested
+        cleanup() {
+          result=$?
+          trap - EXIT
+          set +e
+          docker rm -fv "$prefix-app" "$prefix-db" "$prefix-check" >/dev/null 2>&1
+          docker network rm "$prefix-net" >/dev/null 2>&1
+          removed=true
+          if docker inspect "$prefix-app" >/dev/null 2>&1 || docker inspect "$prefix-db" >/dev/null 2>&1 || docker inspect "$prefix-check" >/dev/null 2>&1 || docker network inspect "$prefix-net" >/dev/null 2>&1; then
+            removed=false
+            result=1
+          fi
+          rm -rf "$work"
+          echo "SMOKE_REPORT commit=$expected imageBuilt=$image_built sportsStartup=$startup liveHTTP=$live readyHTTP=$ready cleanup=$removed lastStage=$stage exit=$result"
+          exit "$result"
+        }
+        trap cleanup EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        stage=archive-verification
+        aws s3api get-object --bucket "${SOURCE_BUCKET:?}" --key "${SOURCE_KEY:?}" "$work/source.zip" >/dev/null
+        printf '%s  %s\n' "$SOURCE_ARCHIVE_SHA256" "$work/source.zip" | sha256sum --check --status
+        python3 - "$work/source.zip" "$work/source" "$expected" <<'PYARCHIVE'
+        import pathlib, sys, zipfile
+        archive, destination, expected = sys.argv[1:]
+        with zipfile.ZipFile(archive) as z:
+            # git archive ZIP records the exported commit in its archive comment.
+            assert z.comment.decode().strip() == expected, 'Archive commit mismatch'
+            for item in z.infolist():
+                p = pathlib.PurePosixPath(item.filename)
+                assert not p.is_absolute() and '..' not in p.parts, 'Unsafe archive path'
+                assert (item.external_attr >> 16) & 0o170000 != 0o120000, 'Symlink not permitted'
+            z.extractall(destination)
+        PYARCHIVE
+        cd "$work/source"
+        docker info >/dev/null
+        python3 - <<'PYLOCK'
+        import json
+        lock = json.load(open('packaging/sports/package-lock.json'))
+        text = json.dumps(lock).lower()
+        assert not any(s in text for s in ['carbonsustain', 'cs-indexer', 'hedera-global-indexer', 'git+', 'git@github'])
+        for entry in lock['packages'].values():
+            if 'resolved' in entry: assert entry['resolved'].startswith('https://registry.npmjs.org/')
+        PYLOCK
+        stage=release-account-verification
+        test "${AWS_DEFAULT_REGION:?}" = us-west-2
+        test "$(aws sts get-caller-identity --query Account --output text)" = 296903956631
+        stage=image-build
+        DOCKER_BUILDKIT=1 docker build --platform linux/amd64 -f Dockerfile.sports -t "$prefix:smoke" .
+        image_built=true
+        test "$(docker image inspect --format '{{json .Config.Cmd}}' "$prefix:smoke")" = '["node","dist/src/sports/main.js"]'
+        test "$(docker image inspect --format '{{.Config.User}}' "$prefix:smoke")" = node
+        test "$(docker image inspect --format '{{.Architecture}}' "$prefix:smoke")" = amd64
+        stage=isolated-plugin-tests
+        # ZIP extraction under umask 077 produces a root-owned 0600 script.
+        # Make only these non-sensitive test inputs readable by the container's node user.
+        chmod 0444 "$work/source/scripts/test-sports-packaging.cjs" "$work/source/packaging/sports/package-lock.json"
+        # Runtime intentionally omits the lockfile. Expose the verified build input
+        # read-only for this packaging test only; do not add it to the image.
+        docker run --rm --name "$prefix-check" --network none --entrypoint node -e SPORTS_PACKAGE_TEST_DIR=/app --mount "type=bind,src=$work/source/scripts/test-sports-packaging.cjs,dst=/tmp/test-sports-packaging.cjs,readonly" --mount "type=bind,src=$work/source/packaging/sports/package-lock.json,dst=/app/package-lock.json,readonly" "$prefix:smoke" --test /tmp/test-sports-packaging.cjs
+        stage=temporary-database
+        password=$(openssl rand -hex 24)
+        participant=$(openssl rand -hex 32)
+        claim=$(openssl rand -hex 32)
+        admin=$(openssl rand -hex 32)
+        printf 'POSTGRES_USER=smoke\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=sports_smoke\n' "$password" > "$work/db.env"
+        printf 'DATABASE_URL=postgresql://smoke:%s@%s-db:5432/sports_smoke\nSPORTS_PARTICIPANT_SECRET=%s\nSPORTS_CLAIM_KEYS={"v1":"%s"}\nSPORTS_ADMIN_JWT_SECRET=%s\n' "$password" "$prefix" "$participant" "$claim" "$admin" > "$work/app.env"
+        unset password participant claim admin
+        docker network create "$prefix-net" >/dev/null
+        docker run -d --name "$prefix-db" --network "$prefix-net" --env-file "$work/db.env" postgres:16 >/dev/null
+        db_ready=false
+        for attempt in $(seq 1 30); do
+          if docker exec "$prefix-db" pg_isready -h 127.0.0.1 -U smoke -d sports_smoke >/dev/null 2>&1; then db_ready=true; break; fi
+          sleep 2
+        done
+        test "$db_ready" = true
+        stage=sports-startup
+        # Use the image's unchanged default CMD. Do not invoke start:prod or migrations.
+        docker run -d --name "$prefix-app" --network "$prefix-net" --env-file "$work/app.env" -p 127.0.0.1:18080:8080 "$prefix:smoke" >/dev/null
+        for attempt in $(seq 1 30); do
+          live=$(curl --silent --max-time 3 -o "$work/live.json" -w '%{http_code}' http://127.0.0.1:18080/health/sports/live || true)
+          if [ "$live" = 200 ]; then break; fi
+          sleep 2
+        done
+        test "$live" = 200
+        python3 -c 'import json,sys; assert json.load(open(sys.argv[1])) == {"status":"ok"}' "$work/live.json"
+        startup=true
+        stage=readiness-no-schema
+        ready=$(curl --silent --max-time 5 -o "$work/ready.json" -w '%{http_code}' http://127.0.0.1:18080/health/sports)
+        test "$ready" = 503
+        # Prove the temporary database still contains no application tables.
+        count=$(docker exec "$prefix-db" psql -U smoke -d sports_smoke -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")
+        test "$count" = 0
+        stage=ecr-publication
+        registry=296903956631.dkr.ecr.us-west-2.amazonaws.com
+        repository=nature-backers-sports-staging
+        release_tag="release-e088567-${CODEBUILD_BUILD_NUMBER}"
+        image_uri="$registry/$repository:$release_tag"
+        # Repository must already exist under separate approval; build cannot create it.
+        export DOCKER_CONFIG="$work/docker-auth"
+        mkdir -m 700 "$DOCKER_CONFIG"
+        aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin "$registry"
+        docker tag "$prefix:smoke" "$image_uri"
+        docker push "$image_uri"
+        stage=registry-digest-verification
+        registry_digest=$(aws ecr describe-images --region us-west-2 --repository-name "$repository" --image-ids "imageTag=$release_tag" --query 'imageDetails[0].imageDigest' --output text)
+        [[ "$registry_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        docker image inspect --format '{{json .RepoDigests}}' "$image_uri" > "$work/repo-digests.json"
+        python3 - "$work/repo-digests.json" "$registry/$repository@$registry_digest" <<'PYDIGEST'
+        import json,sys
+        assert sys.argv[2] in json.load(open(sys.argv[1])), 'Docker/ECR digest mismatch'
+        PYDIGEST
+        aws ecr batch-get-image --region us-west-2 --repository-name "$repository" --image-ids "imageDigest=$registry_digest" > "$work/registry-manifest.json"
+        python3 - "$work/registry-manifest.json" "$registry_digest" <<'PYMANIFEST'
+        import hashlib,json,sys
+        response = json.load(open(sys.argv[1]))
+        assert not response.get('failures') and len(response['images']) == 1
+        image = response['images'][0]
+        assert image['imageId']['imageDigest'] == sys.argv[2]
+        assert 'sha256:' + hashlib.sha256(image['imageManifest'].encode()).hexdigest() == sys.argv[2], 'Manifest checksum mismatch'
+        PYMANIFEST
+        docker logout "$registry" >/dev/null
+        echo "RELEASE_REPORT source=$expected archiveSHA256=$SOURCE_ARCHIVE_SHA256 build=$CODEBUILD_BUILD_ID image=$image_uri digest=$registry_digest digestVerified=true"
+        stage=complete
+  post_build:
+    commands:
+      - |
+        # Best-effort backup cleanup if the main shell exited unexpectedly.
+        prefix="sports-smoke-${CODEBUILD_BUILD_NUMBER}"
+        docker rm -fv "$prefix-app" "$prefix-db" "$prefix-check" >/dev/null 2>&1 || true
+        docker network rm "$prefix-net" >/dev/null 2>&1 || true
