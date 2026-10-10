@@ -12,7 +12,7 @@ The build works in mktemp/source and its EXIT trap deletes that directory. CodeB
 
 ### Inspected network and proposed database subnets
 
-Owner-confirmed read-only inventory: VPC `vpc-0fb4c77da1221cbe3`, Oregon, IPv4 `172.31.0.0/16`. Main route table `rtb-029a2752cb5cc9e7b` has `172.31.0.0/16 → local` and `0.0.0.0/0 → igw-037e361cf3ba929ce`. Keep this route table, its routes and existing subnet associations unchanged.
+Owner-confirmed read-only inventory: VPC `vpc-0fb4c77da1221cbe3`, Oregon, IPv4 `172.31.0.0/16`. Main route table `rtb-029a2752cb5cc9e7b` has `172.31.0.0/16 → local` and `0.0.0.0/0 → igw-037e361cf3ba929ce`. Owner also confirmed VPC DNS resolution and DNS hostnames are both Enabled from the earlier VPC Details screenshot; these requirements are satisfied without configuration changes. Keep this route table, its routes, DNS settings and existing subnet associations unchanged.
 
 | Availability Zone | Existing public subnet | Proposed NEW private DB subnet |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 ## Console sequence, one step at a time
 
 1. Digest/tag recorded. Remaining ECR read-only receipt: image size and scan status, cross-check full build ID/source archive checksum. No changes.
-2. VPC CIDR/subnet ranges/main routes inspected; proposed DB CIDRs validated above. Remaining read-only inspection: existing public subnet IDs, VPC DNS resolution/hostnames, subnet NACLs and available IP counts. No creation.
+2. VPC CIDR/subnet ranges/main routes inspected; proposed DB CIDRs validated above. DNS resolution/hostnames confirmed Enabled. Remaining read-only inspection: existing public subnet IDs, subnet NACLs and available IP counts. No creation.
 3. IAM/Express/Secrets/RDS/Amplify read-only settings review; settle migration-network/RDSCA/adminOAuth/server-secret delivery and budget/retention. Review exact resource manifest for explicit creation approval.
 4. After approval only: create agreed newnetwork/roles/secrets/privateDB resources; separate approval for SQLjob; verify RDS/TLS/schema.
 5. After deployment approval only: create Express using exact verifieddigest, testreadiness200/unauthorized401/legacy404/Atlas; separateAmplify deployment/config and allowed/deniedadminchecks.
@@ -56,7 +56,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 
 Before any infrastructure creation, settle these remaining decisions:
 
-- Confirm VPC DNS resolution and DNS hostnames, actual public subnet IDs/free IPs, and NACL compatibility. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
+- VPC DNS resolution and DNS hostnames are confirmed Enabled. Confirm actual public subnet IDs/free IPs and NACL compatibility. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
 - Confirm one-task CPU/memory and maximum scaling, actual Express role/secret settings and readiness configuration. Public task IPs are for egress, not direct inbound application access.
 - Select PostgreSQL class/version, encryption/backups/deletion policy, least-privilege application grants, trusted RDS CA delivery and private migration runner. Schema setup remains separately approved.
 - Establish staging OAuth owner/client, verified administrator allowlist and Amplify SSR source/runtime secret delivery. Never expose administration/reporting when OAuth is unavailable.
