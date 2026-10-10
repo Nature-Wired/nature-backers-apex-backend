@@ -132,3 +132,48 @@ Reference: https://docs.aws.amazon.com/cli/latest/reference/rds/describe-certifi
 The pinned image includes ca-certificates/openssl but does not bundle an RDS regional CA file. Generic OS trust is not evidence of successful native Prisma/RDS certificate verification. Before deployment, review a supported public CA delivery mechanism and the exact native Prisma6.19.2 trust/hostname verification settings, then validate them against the separately approved isolated database. Do not use sslaccept=accept_invalid_certs or disable TLS verification. Any image/source change required for public CA delivery must be separately reviewed; no rebuild is authorized now.
 
 Follow-on read-only preparation can review PostgreSQL16 rds.force_ssl settings, the private migration-runner design (new DB subnet association required first; no public DB), staging-only IAM/secret ARN scopes, and current Pricing Calculator assumptions. These are independent of the AWS support response, but actual IAM/secrets/network creation, migration and service deployment require separate approval. Existing production resources and reference repositories remain untouched.
+
+## Regional CA inventory and native Prisma TLS assessment
+
+Owner ran read-only RDS DescribeCertificates in account296903956631/us-west-2. Available regional authorities:
+
+| CA identifier | Valid from (UTC) | Expires (UTC) |
+| --- | --- | --- |
+| rds-ca-ecc384-g1 | 2021-05-24T22:06:59+00:00 | 2121-05-24T23:06:59+00:00 |
+| rds-ca-rsa4096-g1 | 2021-05-24T22:03:20+00:00 | 2121-05-24T23:03:20+00:00 |
+| rds-ca-rsa2048-g1 | 2021-05-24T21:59:00+00:00 | 2061-05-24T22:59:00+00:00 |
+
+Initial candidate: rds-ca-rsa2048-g1, not yet selected/provisioned. Regional availability is verified by owner; exact PostgreSQL16 minor-version support remains open. Next read-only CloudShell command:
+
+```bash
+aws rds describe-db-engine-versions \
+  --region us-west-2 \
+  --engine postgres \
+  --query 'DBEngineVersions[?starts_with(EngineVersion, `16.`)].{Version:EngineVersion,CAs:SupportedCACertificateIdentifiers,RotationWithoutRestart:SupportsCertificateRotationWithoutRestart}' \
+  --output json
+```
+
+This requires rds:DescribeDBEngineVersions and changes nothing. Choose a supported16 minor after inspecting its CA list; rotation behavior/leaf-certificate validity is distinct from CA expiry. Do not create a DB to discover compatibility.
+
+### Actual pinned client implementation
+
+Sports PrismaService extends PrismaClient without a driver adapter. Sports manifest pins @prisma/client and prisma6.19.2. Its generated client reports native engine commit **c2990dca591cba766e3b7ef5d9e8a84796e47ab7**. The production implementation is native Rust Quaint → tokio-postgres → postgres-native-tls/native-tls, not the test-only PrismaPg/node-pg adapter. Exact engine source inspected read-only:
+
+- https://github.com/prisma/prisma-engines/blob/c2990dca591cba766e3b7ef5d9e8a84796e47ab7/quaint/src/connector/postgres/url.rs
+- https://github.com/prisma/prisma-engines/blob/c2990dca591cba766e3b7ef5d9e8a84796e47ab7/quaint/src/connector/postgres/native/mod.rs
+
+URL parser defaults sslmode=prefer and sslaccept=accept_invalid_certs. Therefore do not assume TLS/certificate security from the default Prisma client or from sslmode=require alone. Staging DATABASE_URL must explicitly use **sslmode=require&sslaccept=strict&sslcert=/app/certs/rds-us-west-2-rsa2048-g1.crt** (proposed public CA path; not present in the pinned image). Use the actual RDS endpoint hostname as the URL host, not an IP/custom hostname; URL-encode credentials securely. Do not print the connection URL. This connector's parameter is sslcert, not an assumed libpq sslrootcert/verify-full parameter. sslidentity is a separate client identity and is not required for ordinary password-authenticated RDS.
+
+Source reads sslcert as PEM, adds the parsed certificate to native TLS root trust, and disables invalid-certificate acceptance in strict mode. It does not enable invalid-hostname acceptance; standard native TLS hostname validation applies through the PostgreSQL TLS connector. This is implementation evidence, not an executed RDS TLS/negative test. Strict mode retains system roots as well as the supplied root; it does not pin the leaf certificate. The code parses a Certificate::from_pem object; do not assume passing an arbitrary multi-certificate regional bundle loads every root. Review/extract the intended regional RSA2048 CA certificate(s) and test actual trust handling rather than silently relying on bundle order.
+
+### Proposed public CA delivery — approval required
+
+Safest reproducible candidate: obtain AWS's public Oregon CA bundle from https://truststore.pki.rds.amazonaws.com/us-west-2/us-west-2-bundle.pem via verified HTTPS; verify the selected CA subject/issuer/validity/fingerprint against the authoritative source, select the correct PEM root material, and record its checksum. No private key or credential is part of a public CA certificate. A separately reviewed packaging change can copy the approved public .crt into /app/certs with readable, non-writable permissions for node; it must remain separate from credentials and must not generally relax .dockerignore exclusions. This would require a new reviewed source commit/build/digest; the current e088 image has no explicit RDS CA artifact. No such code/image changes are authorized or made now. A controlled read-only runtime public-CA volume is an alternative requiring reviewed ECS support/lifecycle; do not add an unaudited startup download or put credentials into image layers.
+
+### Required verification and server enforcement
+
+Before RDS deployment approval, preserve these open tests: trusted chain + correct hostname succeeds; unrelated/self-signed certificate fails; hostname mismatch fails; missing/wrong CA fails where the chain is not otherwise system-trusted; require mode cannot fall back to plaintext. Use the actual native Prisma client, not pg-only tests. A production-like trusted public certificate might already be system-trusted, so omission of an extra CA file is not in itself a universal negative test. No verification-bypass flags.
+
+For server-side enforcement, inspect the PostgreSQL16 engine-default rds.force_ssl value read-only, then propose a new staging-only postgres16 parameter group with rds.force_ssl=1 explicitly. Review application/reboot behavior before creating/attaching it; do not alter existing/default/production groups. After separately authorized setup, verify the effective setting is1, app session pg_stat_ssl.ssl=true, and a connection with TLS disabled is rejected. Enforce the same TLS verification for the private migration runner. Security groups alone do not enforce encrypted transport.
+
+CA candidate inventory is recorded; engine compatibility, final CA material/delivery, native negative TLS tests and server enforcement remain OPEN. Express deployment remains blocked on support case179166963600053. No AWS resources, application code, root dependencies, reference repositories or database schemas changed.
