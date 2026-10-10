@@ -30,6 +30,8 @@ phases:
             removed=false
             result=1
           fi
+          # Leave the disposable source before CodeBuild enters its next phase.
+          cd "${CODEBUILD_SRC_DIR:-/tmp}" 2>/dev/null || cd /tmp
           rm -rf "$work"
           echo "SMOKE_REPORT commit=$expected imageBuilt=$image_built sportsStartup=$startup liveHTTP=$live readyHTTP=$ready cleanup=$removed lastStage=$stage exit=$result"
           exit "$result"
