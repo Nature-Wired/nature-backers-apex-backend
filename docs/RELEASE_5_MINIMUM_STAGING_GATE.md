@@ -143,7 +143,7 @@ Owner ran read-only RDS DescribeCertificates in account296903956631/us-west-2. A
 | rds-ca-rsa4096-g1 | 2021-05-24T22:03:20+00:00 | 2121-05-24T23:03:20+00:00 |
 | rds-ca-rsa2048-g1 | 2021-05-24T21:59:00+00:00 | 2061-05-24T22:59:00+00:00 |
 
-Initial candidate: rds-ca-rsa2048-g1, not yet selected/provisioned. Regional availability is verified by owner; exact PostgreSQL16 minor-version support remains open. Next read-only CloudShell command:
+Initial candidate: rds-ca-rsa2048-g1, not yet selected/provisioned. Regional availability and PostgreSQL16 minor support are verified by the owner in the latest engine-compatibility section below. The following read-only CloudShell command documents the inspection used:
 
 ```bash
 aws rds describe-db-engine-versions \
@@ -176,4 +176,22 @@ Before RDS deployment approval, preserve these open tests: trusted chain + corre
 
 For server-side enforcement, inspect the PostgreSQL16 engine-default rds.force_ssl value read-only, then propose a new staging-only postgres16 parameter group with rds.force_ssl=1 explicitly. Review application/reboot behavior before creating/attaching it; do not alter existing/default/production groups. After separately authorized setup, verify the effective setting is1, app session pg_stat_ssl.ssl=true, and a connection with TLS disabled is rejected. Enforce the same TLS verification for the private migration runner. Security groups alone do not enforce encrypted transport.
 
-CA candidate inventory is recorded; engine compatibility, final CA material/delivery, native negative TLS tests and server enforcement remain OPEN. Express deployment remains blocked on support case179166963600053. No AWS resources, application code, root dependencies, reference repositories or database schemas changed.
+CA inventory and engine compatibility are recorded (latest findings below); final CA material/delivery, native positive/negative TLS tests and runtime server enforcement remain OPEN. Express deployment remains blocked on support case179166963600053. No AWS resources, application code, root dependencies, reference repositories or database schemas changed.
+
+## Owner-verified PostgreSQL engine/CA compatibility
+
+Owner completed read-only RDS DescribeDBEngineVersions in account296903956631/us-west-2. Available PostgreSQL16 minors: **16.9,16.10,16.11,16.12,16.13,16.14,16.15**. Every listed version supports **rds-ca-rsa2048-g1**, **rds-ca-rsa4096-g1** and **rds-ca-ecc384-g1**, and reports **SupportsCertificateRotationWithoutRestart=true**. This resolves the engine/CA metadata prerequisite; no database was created or changed. These are owner-provided AWS observations, not independently executed API calls by the agent.
+
+Proposed initial staging configuration: **PostgreSQL16.15**, **rds-ca-rsa2048-g1**, new staging-only parameter group with **rds.force_ssl=1**, and native Prisma6.19.2 **sslmode=require&sslaccept=strict** with verified CA material at a reviewed container path and the actual RDS endpoint hostname. These are proposed settings, not provisioned configuration or observed runtime enforcement. CertificateRotationWithoutRestart describes supported engine behavior, not the need to restart app tasks when client configuration/CA artifacts change. Recheck engine orderability/class availability and current metadata before separately approved creation.
+
+### Deployment hold remains in effect
+
+Before final deployment approval, the actual native Prisma connector must pass all of:
+
+- Correct trusted certificate chain and matching server hostname succeed.
+- Untrusted certificate chain fails; no invalid-certificate acceptance or plaintext fallback.
+- Trusted chain with mismatched server hostname fails.
+- Approved public CA file is delivered reproducibly to the sports container, readable by USER node, with recorded provenance/checksum and tested connector parsing/trust behavior. Do not assume a multi-certificate bundle is fully loaded.
+- RDS effective rds.force_ssl=1, encrypted application/migration sessions and rejected plaintext connections are verified after separately authorized isolated DB setup.
+
+Client positive/negative tests and CA delivery remain OPEN. No additional application/source/image change, infrastructure creation, migration or deployment is authorized. The independently unresolved Express ALB/custom-task security-group gate remains blocked pending AWS support case179166963600053. The existing e088 release image/digest and frontend24e0cae remain pinned until any necessary CA packaging change is separately reviewed and approved.
