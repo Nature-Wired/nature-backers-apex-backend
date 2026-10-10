@@ -2,7 +2,7 @@
 
 October10,2026; rehearsal October14/event October15, America/Los_Angeles. Owner reports release#5 successful in account296903956631/us-west-2. Backend e088567351ef6b5ef634fe08bb88a03a0f1a7573; frontend24e0cae485bafb2fac8586bdbc8c6c6c98aa3a94.
 
-Repository: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging`. Owner reports digestVerified=true and smoke built/startup=true,live200,ready503,cleanup=true,complete,exit0. Image tag confirmed by owner: `release-e088567-5`. Tag URI: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging:release-e088567-5`. Full valid digest is **pending**: the subsequently supplied `sha256:ea7fb45d672129ad5899f6f089bea769ba31282b0dd4561f1719b1f78cbee3c` contains only 63 hexadecimal characters. Do not pad or guess the missing character. No validated image URI@digest can be recorded yet. Evidence is owner-provided, not an AWS read by the agent. Obtain tag/full digest/build ARN/source archive checksum/platform/scan findings before deployment approval; do not invent them or repeat the build.
+Repository: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging`. Owner reports digestVerified=true and smoke built/startup=true,live200,ready503,cleanup=true,complete,exit0. Image tag confirmed by owner: `release-e088567-5`. Tag URI: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging:release-e088567-5`. Full digest confirmed by the owner from ECR: `sha256:ea7fb45d6d72129ad5899f6f089bea769ba31282b0dd4561f1719b1f78cbee3c` (64 hexadecimal characters, syntax validated). Digest-pinned staging image: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging@sha256:ea7fb45d6d72129ad5899f6f089bea769ba31282b0dd4561f1719b1f78cbee3c`. Use this exact image reference in the future Express image field, not the mutable selection of a tag. Evidence is owner-provided, not an independent AWS read by the agent. Build ARN/source archive checksum/image size/scan findings remain to be recorded; no rebuild is required. Backend source and frontend pins remain unchanged.
 
 ## Cleanup warning
 
@@ -30,7 +30,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 
 ## Console sequence, one step at a time
 
-1. ECR read-only: open repository > release#5image; copy full sha256digest/tag/size/scanstatus. Cross-check release report. No changes.
+1. Digest/tag recorded. Remaining ECR read-only receipt: image size and scan status, cross-check full build ID/source archive checksum. No changes.
 2. VPC read-only: confirm VPC CIDR/subnets/AZs/routes/DNS/NACLs and propose available DB CIDRs. No creation.
 3. IAM/Express/Secrets/RDS/Amplify read-only settings review; settle migration-network/RDSCA/adminOAuth/server-secret delivery and budget/retention. Review exact resource manifest for explicit creation approval.
 4. After approval only: create agreed newnetwork/roles/secrets/privateDB resources; separate approval for SQLjob; verify RDS/TLS/schema.
