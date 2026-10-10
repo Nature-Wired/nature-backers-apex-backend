@@ -2,7 +2,7 @@
 
 October10,2026; rehearsal October14/event October15, America/Los_Angeles. Owner reports release#5 successful in account296903956631/us-west-2. Backend e088567351ef6b5ef634fe08bb88a03a0f1a7573; frontend24e0cae485bafb2fac8586bdbc8c6c6c98aa3a94.
 
-Repository: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging`. Owner reports digestVerified=true and smoke built/startup=true,live200,ready503,cleanup=true,complete,exit0. Full digest is **pending**: supplied `sha256` has no64-character value. No exact image URI@digest can be recorded yet. Evidence is owner-provided, not an AWS read by the agent. Obtain tag/full digest/build ARN/source archive checksum/platform/scan findings before deployment approval; do not invent them or repeat the build.
+Repository: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging`. Owner reports digestVerified=true and smoke built/startup=true,live200,ready503,cleanup=true,complete,exit0. Image tag confirmed by owner: `release-e088567-5`. Tag URI: `296903956631.dkr.ecr.us-west-2.amazonaws.com/nature-backers-sports-staging:release-e088567-5`. Full valid digest is **pending**: the subsequently supplied `sha256:ea7fb45d672129ad5899f6f089bea769ba31282b0dd4561f1719b1f78cbee3c` contains only 63 hexadecimal characters. Do not pad or guess the missing character. No validated image URI@digest can be recorded yet. Evidence is owner-provided, not an AWS read by the agent. Obtain tag/full digest/build ARN/source archive checksum/platform/scan findings before deployment approval; do not invent them or repeat the build.
 
 ## Cleanup warning
 
