@@ -186,6 +186,8 @@ Proposed initial staging configuration: **PostgreSQL16.15**, **rds-ca-rsa2048-g1
 
 ### Deployment hold remains in effect
 
+Test-only native TLS harness is prepared for review in scripts/test-sports-prisma-tls.cjs and scripts/sports-prisma-tls-client.cjs; see LOCAL_PRISMA_TLS_HARNESS_REVIEW.md for commands, expected outcomes and separate RDS checks. It has not been executed; no containers/certificates/images/AWS resources were created by preparation. Execution requires separate approval, and does not clear this deployment hold.
+
 Before final deployment approval, the actual native Prisma connector must pass all of:
 
 - Correct trusted certificate chain and matching server hostname succeed.
