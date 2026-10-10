@@ -1,5 +1,7 @@
 # Sports packaging verification — October 10, 2026
 
+> Current handoff: [October 10 CodeBuild-to-staging readiness](OCTOBER_10_CODEBUILD_TO_STAGING.md). Owner-reported build #4 passed for e088567; earlier Docker blockers, missing-health statements, private sports Git dependency assumptions and frontend SHAs below are historical. Current frontend: 24e0cae485bafb2fac8586bdbc8c6c6c98aa3a94. AWS staging remains unapproved.
+
 Development branch: feat/oc-summit-milestone-a. Shared package.json/package-lock.json, Prisma schema, employee source and SportsAtlasService are unchanged. Guardian Agent plugin and Scaffold-HBAR remain unchanged.
 
 Passed:

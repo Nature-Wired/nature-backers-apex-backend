@@ -1,5 +1,7 @@
 # ECS Express Console preparation — October 14 rehearsal / October 15 event
 
+> Current handoff: [October 10 CodeBuild-to-staging readiness](OCTOBER_10_CODEBUILD_TO_STAGING.md). Owner-reported build #4 passed for e088567; earlier Docker blockers, missing-health statements, private sports Git dependency assumptions and frontend SHAs below are historical. Current frontend: 24e0cae485bafb2fac8586bdbc8c6c6c98aa3a94. AWS staging remains unapproved.
+
 Account 296903956631, Oregon us-west-2. All steps below are for review and execution ONLY AFTER explicit approval. No AWS resources, images, migration jobs or applications have been created/deployed by this preparation. Keep the live campaign DRAFT and the shortlist pending. Existing us-west-1 Amplify/CloudFront/employee resources remain untouched.
 
 ## Artifacts and startup contract

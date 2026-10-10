@@ -1,5 +1,7 @@
 # October 15 staging revision: ECS instead of App Runner
 
+> Current handoff: [October 10 CodeBuild-to-staging readiness](OCTOBER_10_CODEBUILD_TO_STAGING.md). Owner-reported build #4 passed for e088567; earlier Docker blockers, missing-health statements, private sports Git dependency assumptions and frontend SHAs below are historical. Current frontend: 24e0cae485bafb2fac8586bdbc8c6c6c98aa3a94. AWS staging remains unapproved.
+
 Review only, October 9, 2026. Account Nature Wired `296903956631`; NEW isolated staging in Oregon `us-west-2`. Existing Amplify apps are in N. California `us-west-1`; do not modify them. Owner reports AWS's April 30, 2026 App Runner new-customer cutoff. No App Runner availability assumed. No AWS resource, deployment or migration action was taken.
 
 AWS documentation/pricing retrieval failed from this runner. ECS Express Mode's exact current console defaults, regional/account eligibility, generated HTTPS domain, task sizing, replica minimum, secrets configuration and network controls require read-only confirmation in the owner's console before approving the final resource manifest. Estimates below are transparent planning assumptions, not live quotes. Do not treat an unknown setting as supported merely because standard ECS supports it.
