@@ -10,9 +10,24 @@ The build works in mktemp/source and its EXIT trap deletes that directory. CodeB
 
 ## Minimum-cost candidate for approval
 
-Use the existing VPC vpc-0fb4c77da1221cbe3 only after read-only CIDR/routes/DNS/NACL inspection. New sports resources only; no existing route/SG/application updates. Select two of its public subnets across AZs for Express. Owner verified official AWS docs: public subnets enable public task IP, Express supplies internet-facing ALB/HTTPS443/generated domain/ACM certificate. Atlas HTTPS egress uses IGW/public IP and outbound rules, not NAT.
+### Inspected network and proposed database subnets
 
-Create two NEW private DB subnets with available non-overlapping CIDRs, a NEW route table with local route only and associations only to these DB subnets, NEW DB subnet group and SG. Existing public subnet route table remains unchanged. A separate new VPC is an equally free VPC-level alternative if shared-network isolation is unacceptable; do not silently choose or modify existing network resources.
+Owner-confirmed read-only inventory: VPC `vpc-0fb4c77da1221cbe3`, Oregon, IPv4 `172.31.0.0/16`. Main route table `rtb-029a2752cb5cc9e7b` has `172.31.0.0/16 → local` and `0.0.0.0/0 → igw-037e361cf3ba929ce`. Keep this route table, its routes and existing subnet associations unchanged.
+
+| Availability Zone | Existing public subnet | Proposed NEW private DB subnet |
+| --- | --- | --- |
+| us-west-2a | 172.31.32.0/20 | 172.31.64.0/27 |
+| us-west-2b | 172.31.16.0/20 | 172.31.64.32/27 |
+| us-west-2c | 172.31.0.0/20 | None |
+| us-west-2d | 172.31.48.0/20 | None |
+
+Python ipaddress validation confirms both proposed CIDRs are inside the VPC, do not overlap each other, and do not overlap any of the four inspected subnets. Their ranges are `172.31.64.0–172.31.64.31` and `172.31.64.32–172.31.64.63`. Each /27 has 32 addresses, 27 usable after AWS reservations. These are proposed allocations, not reserved addresses; recheck current inventory immediately before authorized creation. Monitor available IP capacity before later scaling or restore operations.
+
+After separate approval, create a NEW dedicated route table with **only `172.31.0.0/16 → local`**, and explicitly associate BOTH new DB subnets before provisioning RDS. Do not attach Internet Gateway, NAT, peering or transit default/remote routes to it. New subnets initially inherit the main route table until explicitly associated; this association verification is a mandatory gate. Disable automatic public IPv4 assignment for the DB subnets and set RDS public access to No. Create a new DB subnet group containing just these two subnets and a new DB security group.
+
+Select existing public subnets across two AZs for Express only after recording their subnet IDs, DNS settings and NACLs. Owner verified official AWS docs: public subnets enable public task IP, Express supplies internet-facing ALB/HTTPS443/generated domain/ACM certificate. Atlas HTTPS egress uses IGW/public IP and outbound rules, not NAT. No changes to existing subnet routes, security groups or NACLs are authorized.
+
+Sharing the VPC is not complete network isolation: the local route still permits VPC communication. Enforce new ALB/task/DB security groups: task port8080 only from the ALB SG, DB port5432 only from the sports task SG and an explicitly approved temporary migration-runner SG. Remove temporary migration access after setup. Do not allow the entire VPC CIDR or reuse the default/production DB security group. Inspect NACLs for required bidirectional database/HTTPS traffic and ephemeral return ports; do not edit a shared NACL as a shortcut.
 
 Express/Fargate: one task, explicit min=max1, LinuxAMD64, initial0.5vCPU/1GB subject to staging memory tests,port8080,unchanged non-root sports CMD. HTTPS443 ALB ingress; task8080 only from ALB SG, DB5432 only from taskSG; no direct internet task ingress. Outbound HTTPS/DNS as required and private DB traffic. Readiness /health/sports must200 after schema setup; liveness /health/sports/live200; sensible startup grace. No NAT/endpoints/WAF/extra replicas unless separately reviewed. One-task deployment is for demonstration, not HA; deployment replacement may temporarily overlap tasks.
 
@@ -31,13 +46,22 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 ## Console sequence, one step at a time
 
 1. Digest/tag recorded. Remaining ECR read-only receipt: image size and scan status, cross-check full build ID/source archive checksum. No changes.
-2. VPC read-only: confirm VPC CIDR/subnets/AZs/routes/DNS/NACLs and propose available DB CIDRs. No creation.
+2. VPC CIDR/subnet ranges/main routes inspected; proposed DB CIDRs validated above. Remaining read-only inspection: existing public subnet IDs, VPC DNS resolution/hostnames, subnet NACLs and available IP counts. No creation.
 3. IAM/Express/Secrets/RDS/Amplify read-only settings review; settle migration-network/RDSCA/adminOAuth/server-secret delivery and budget/retention. Review exact resource manifest for explicit creation approval.
 4. After approval only: create agreed newnetwork/roles/secrets/privateDB resources; separate approval for SQLjob; verify RDS/TLS/schema.
 5. After deployment approval only: create Express using exact verifieddigest, testreadiness200/unauthorized401/legacy404/Atlas; separateAmplify deployment/config and allowed/deniedadminchecks.
 6. Approvedthree-projectDRAFT snapshots; separatepublicationapproval, thenreal iPhoneQR/privateSafari/select/retry/claim/download/cleansessionretrieval/dashboard/restart tests. Commitmentoptional/illustrative/notdisbursed; anonymousselectionsnotverifieduniquefans.
 
 ## Retention and cleanup decisions
+
+Before any infrastructure creation, settle these remaining decisions:
+
+- Confirm VPC DNS resolution and DNS hostnames, actual public subnet IDs/free IPs, and NACL compatibility. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
+- Confirm one-task CPU/memory and maximum scaling, actual Express role/secret settings and readiness configuration. Public task IPs are for egress, not direct inbound application access.
+- Select PostgreSQL class/version, encryption/backups/deletion policy, least-privilege application grants, trusted RDS CA delivery and private migration runner. Schema setup remains separately approved.
+- Establish staging OAuth owner/client, verified administrator allowlist and Amplify SSR source/runtime secret delivery. Never expose administration/reporting when OAuth is unavailable.
+- Approve the resource manifest, estimated cost ceiling, monitoring/cleanup owner and online badge-retention period. Budget alerts are not hard spending caps. Subnets, route tables and security groups have no separate hourly charge; no NAT is proposed. Existing compute/ALB/RDS/Amplify estimates remain unchanged.
+- Record remaining ECR scan/size/build receipt; obtain three approved exact Atlas sourceTimestamp records and campaign copy/window. Campaign publication remains a separate approval, not a consequence of infrastructure creation.
 
 Existing temporaryCodeBuild/source/logs may be cleaned up only with scoped cleanup approval; retain release evidence and ECRimage, remove unnecessary pushpermissions. A confirmed full digest does not require another build. No ECS/RDS/Amplify resources yet.
 
