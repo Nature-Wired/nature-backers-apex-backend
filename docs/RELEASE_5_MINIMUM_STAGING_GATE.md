@@ -114,7 +114,20 @@ The case asks which security groups are attached to the Express-managed ALB and 
 
 ## Parallel read-only preparation: RDS TLS
 
-Next Console inspection: select Oregon, open Amazon RDS → Certificates, and record the available CA identifiers and validity/expiration information. Do not rotate certificates, create a database or change any parameter group. Prefer review of a current supported G1 CA; do not assume an identifier alone proves the final database engine/class supports it. Record these details for the new PostgreSQL16 configuration, not changes to an existing database.
+Owner inspected the RDS Certificate update Console in Oregon: databases requiring update=0, no database records displayed, update controls disabled. That page does not enumerate regional certificate authorities. No certificate rotation, database or AWS resource creation occurred. RDS CA selection and native Prisma certificate-verification compatibility remain OPEN.
+
+Use the read-only RDS DescribeCertificates API, which does not require an existing database. In an existing authenticated AWS CLI session, or standard Console CloudShell (not a newly created VPC CloudShell environment), run:
+
+```bash
+aws rds describe-certificates \
+  --region us-west-2 \
+  --query 'Certificates[].{CA:CertificateIdentifier,ValidFrom:ValidFrom,Expires:ValidTill}' \
+  --output table
+```
+
+This lists the available regional CA identifiers and validity periods only; it does not retrieve database data, credentials or private keys and does not modify certificates/resources. IAM permission is rds:DescribeCertificates (Resource=*; restrict aws:RequestedRegion to us-west-2 if provisioning a scoped read policy). An AccessDenied response should be reported rather than granting broad access; any IAM change requires separate approval. The agent has not executed this AWS request.
+
+Reference: https://docs.aws.amazon.com/cli/latest/reference/rds/describe-certificates.html. Certificate expiration is CA validity, not proof of the future database leaf-certificate lifetime or automatic rotation behavior. Subsequent read-only DescribeDBEngineVersions for the selected PostgreSQL16 minor can confirm SupportedCACertificateIdentifiers and rotation support. No CA is selected yet; do not assume availability alone proves engine/client compatibility. Do not rotate certificates, create a database or change parameter groups.
 
 The pinned image includes ca-certificates/openssl but does not bundle an RDS regional CA file. Generic OS trust is not evidence of successful native Prisma/RDS certificate verification. Before deployment, review a supported public CA delivery mechanism and the exact native Prisma6.19.2 trust/hostname verification settings, then validate them against the separately approved isolated database. Do not use sslaccept=accept_invalid_certs or disable TLS verification. Any image/source change required for public CA delivery must be separately reviewed; no rebuild is authorized now.
 
