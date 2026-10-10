@@ -25,7 +25,7 @@ Python ipaddress validation confirms both proposed CIDRs are inside the VPC, do 
 
 After separate approval, create a NEW dedicated route table with **only `172.31.0.0/16 → local`**, and explicitly associate BOTH new DB subnets before provisioning RDS. Do not attach Internet Gateway, NAT, peering or transit default/remote routes to it. New subnets initially inherit the main route table until explicitly associated; this association verification is a mandatory gate. Disable automatic public IPv4 assignment for the DB subnets and set RDS public access to No. Create a new DB subnet group containing just these two subnets and a new DB security group.
 
-Select existing public subnets across two AZs for Express only after recording their subnet IDs, DNS settings and NACLs. Owner verified official AWS docs: public subnets enable public task IP, Express supplies internet-facing ALB/HTTPS443/generated domain/ACM certificate. Atlas HTTPS egress uses IGW/public IP and outbound rules, not NAT. No changes to existing subnet routes, security groups or NACLs are authorized.
+Owner-confirmed public task/ALB subnet candidates: us-west-2a `subnet-0a25137ba653e1e9f` (`172.31.32.0/20`) and us-west-2b `subnet-00b0c95fa99997bac` (`172.31.16.0/20`). Each had 4,091 available IPv4 addresses at read-only inspection, sufficient for the proposed small staging topology. Counts are point-in-time and should be rechecked before creation. VPC DNS settings are confirmed; subnet NACL associations/rules remain to be inspected. Owner verified official AWS docs: public subnets enable public task IP, Express supplies internet-facing ALB/HTTPS443/generated domain/ACM certificate. Atlas HTTPS egress uses IGW/public IP and outbound rules, not NAT. No changes to existing subnet routes, security groups or NACLs are authorized.
 
 Sharing the VPC is not complete network isolation: the local route still permits VPC communication. Enforce new ALB/task/DB security groups: task port8080 only from the ALB SG, DB port5432 only from the sports task SG and an explicitly approved temporary migration-runner SG. Remove temporary migration access after setup. Do not allow the entire VPC CIDR or reuse the default/production DB security group. Inspect NACLs for required bidirectional database/HTTPS traffic and ephemeral return ports; do not edit a shared NACL as a shortcut.
 
@@ -46,7 +46,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 ## Console sequence, one step at a time
 
 1. Digest/tag recorded. Remaining ECR read-only receipt: image size and scan status, cross-check full build ID/source archive checksum. No changes.
-2. VPC CIDR/subnet ranges/main routes inspected; proposed DB CIDRs validated above. DNS resolution/hostnames confirmed Enabled. Remaining read-only inspection: existing public subnet IDs, subnet NACLs and available IP counts. No creation.
+2. VPC CIDR/subnet ranges/main routes inspected; proposed DB CIDRs validated above. DNS resolution/hostnames confirmed Enabled. Public subnet IDs and available IP counts are recorded above. Remaining read-only network inspection: subnet NACL associations and inbound/outbound rules, followed by verification of each selected subnet’s actual route-table association. No creation.
 3. IAM/Express/Secrets/RDS/Amplify read-only settings review; settle migration-network/RDSCA/adminOAuth/server-secret delivery and budget/retention. Review exact resource manifest for explicit creation approval.
 4. After approval only: create agreed newnetwork/roles/secrets/privateDB resources; separate approval for SQLjob; verify RDS/TLS/schema.
 5. After deployment approval only: create Express using exact verifieddigest, testreadiness200/unauthorized401/legacy404/Atlas; separateAmplify deployment/config and allowed/deniedadminchecks.
@@ -56,7 +56,7 @@ Target setup October11–13 only after approvals; October14 phone rehearsal,Octo
 
 Before any infrastructure creation, settle these remaining decisions:
 
-- VPC DNS resolution and DNS hostnames are confirmed Enabled. Confirm actual public subnet IDs/free IPs and NACL compatibility. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
+- VPC DNS resolution and DNS hostnames are confirmed Enabled. Public subnet IDs/free IPs are recorded above. Confirm NACL compatibility and actual selected-subnet route-table associations. Explicitly approve the new private CIDRs, dedicated local-only route table and new security groups; no existing network edits.
 - Confirm one-task CPU/memory and maximum scaling, actual Express role/secret settings and readiness configuration. Public task IPs are for egress, not direct inbound application access.
 - Select PostgreSQL class/version, encryption/backups/deletion policy, least-privilege application grants, trusted RDS CA delivery and private migration runner. Schema setup remains separately approved.
 - Establish staging OAuth owner/client, verified administrator allowlist and Amplify SSR source/runtime secret delivery. Never expose administration/reporting when OAuth is unavailable.
